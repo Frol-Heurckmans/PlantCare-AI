@@ -1,0 +1,98 @@
+[
+  {
+    "plantName": "Lavender",
+    "scientificName": "Lavandula angustifolia",
+    "isHealthy": true,
+    "healthScore": 95,
+    "diagnosis": "The lavender plants appear to be thriving, exhibiting robust growth and abundant flowering. The vibrant purple color and upright stems suggest optimal health and minimal stress. No signs of disease or pest infestation are visible in the image.",
+    "careInstructions": [
+      "Ensure adequate sunlight (6-8 hours daily).",
+      "Water deeply but infrequently, allowing the soil to dry between waterings.",
+      "Prune lightly after flowering to promote bushier growth.",
+      "Fertilize sparingly with a balanced fertilizer in spring."
+    ],
+    "id": "6108be4c-782d-4046-8985-3d5a8a15f22d",
+    "timestamp": "2026-03-27T10:11:26"
+  },
+  {
+    "id": "5ff398e5-5d2c-4a79-adf6-62534dbc208c",
+    "date": "2026-03-27",
+    "name": "Plant Scan",
+    "health": 85
+  },
+  {
+    "plantName": "Lavender",
+    "scientificName": "Lavandula angustifolia",
+    "isHealthy": true,
+    "healthScore": 95,
+    "diagnosis": "The lavender plants display vibrant purple flowers and lush green foliage, indicating robust health. No visible signs of stress, pests, or disease. Proper environmental conditions appear to be met.",
+    "careInstructions": [
+      "Water moderately, allowing soil to dry between waterings to prevent root rot.",
+      "Prune spent blooms after flowering to encourage bushier growth and repeat blooms.",
+      "Ensure 6-8 hours of direct sunlight daily for optimal flower production.",
+      "Apply well-balanced fertilizer once in early spring to support growth."
+    ],
+    "id": "188c54d9-6e93-45f6-a27d-a3ae999c9b78",
+    "timestamp": "2026-03-27T09:28:59"
+  },
+  {
+    "plantName": "Common Daisy",
+    "scientificName": "Bellis perennis",
+    "isHealthy": false,
+    "healthScore": 55,
+    "diagnosis": "The drooping petals with brown edges indicate dehydration stress. Prolonged heat or insufficient watering has caused wilting. Nutrient deficiency may also weaken structural integrity.",
+    "careInstructions": [
+      "Water deeply daily until soil saturation, then allow slight drying between sessions",
+      "Swap to shaded area during peak sunlight hours",
+      "Apply moisture-retentive mulch around base",
+      "Trim dead petal tips to redirect energy to healthy growth"
+    ],
+    "id": "46782778-3489-4515-b441-072288f17a26",
+    "timestamp": "2026-03-27T09:21:34"
+  },
+  {
+    "plantName": "Shasta Daisy",
+    "scientificName": "Leucanthemum × superbum",
+    "isHealthy": false,
+    "healthScore": 65,
+    "diagnosis": "This Shasta Daisy exhibits signs of senescence, indicated by the significant fading and drooping of the petals. The flower is nearing the end of its bloom cycle and is losing its vibrancy. While not immediately threatening, continued decline suggests a need for adjustments to its environment.",
+    "careInstructions": [
+      "Ensure adequate sunlight exposure (at least 6 hours daily).",
+      "Check soil moisture; allow the top inch to dry out between waterings.",
+      "Fertilize lightly with a balanced fertilizer in spring and summer.",
+      "Consider providing support to prevent further petal droop, such as a stake."
+    ],
+    "id": "bebacf2f-1978-4d84-889e-50c8bda87ef2",
+    "timestamp": "2026-03-27T09:21:12"
+  },
+  {
+    "plantName": "Lavender",
+    "scientificName": "Lavandula angustifolia",
+    "isHealthy": true,
+    "healthScore": 92,
+    "diagnosis": "The lavender plant in the image appears to be thriving, exhibiting robust growth and abundant flower spikes. The foliage is vibrant green, indicating adequate hydration and nutrient levels. There are no visible signs of disease or pest infestation, suggesting a healthy and well-maintained specimen.",
+    "careInstructions": [
+      "Ensure well-drained soil to prevent root rot.",
+      "Water deeply but infrequently, allowing the soil to dry out between waterings.",
+      "Provide full sun exposure for optimal flowering.",
+      "Prune after flowering to maintain shape and encourage bushier growth."
+    ],
+    "id": "dcc50b92-7c5f-4023-9ffb-98d552a65580",
+    "timestamp": "2026-03-27T09:20:57"
+  },
+  {
+    "plantName": "Lavender",
+    "scientificName": "Lavandula angustifolia",
+    "isHealthy": true,
+    "healthScore": 95,
+    "diagnosis": "The lavender plants appear vibrant and show no signs of disease or pest infestation. The flower spikes are well-developed, indicating optimal growing conditions. Overall, the plants are thriving.",
+    "careInstructions": [
+      "Prune spent flower stalks to encourage continued blooming.",
+      "Ensure well-drained soil to prevent root rot.",
+      "Provide full sun exposure for at least 6-8 hours daily.",
+      "Fertilize lightly in spring with a balanced fertilizer."
+    ],
+    "id": "07a1735d-f596-4e0b-bcea-f928f61bcdcc",
+    "timestamp": "2026-03-27T09:17:01"
+  }
+]
