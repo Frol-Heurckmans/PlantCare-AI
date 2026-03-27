@@ -225,12 +225,15 @@ st.markdown(
 
 # ─── Session state init (history loaded from disk once per session) ───────────
 if "history_meta" not in st.session_state:
-    # List of result dicts (no images — those are loaded on demand)
     st.session_state.history_meta = _load_history_file()
 if "current_result" not in st.session_state:
-    st.session_state.current_result = None   # {"result": dict, "image_uri": str}
+    st.session_state.current_result = None
 if "view" not in st.session_state:
-    st.session_state.view = "main"           # "main" | "history"
+    st.session_state.view = "home"        # "home" | "search" | "history"
+if "search_result" not in st.session_state:
+    st.session_state.search_result = None
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
 
 
 # ─── OpenRouter analysis ──────────────────────────────────────────────────────
@@ -299,9 +302,9 @@ Rules:
             timeout=60,
         )
 
-        # On rate limit or server error, try next model
-        if response.status_code in (429, 503, 502):
-            last_error = f"Model {model} rate-limited, trying next…"
+        # On rate limit, 404 (bad provider), or server error — try next model
+        if response.status_code in (429, 503, 502, 404):
+            last_error = f"Model {model} unavailable, trying next…"
             continue
 
         if not response.ok:
@@ -317,8 +320,200 @@ Rules:
     raise RuntimeError("All free models are currently rate-limited. Please try again in a moment.")
 
 
+def search_plant(query: str) -> dict:
+    """Look up a plant by name using OpenRouter. Returns structured info card."""
+    api_key = os.environ.get("OPENROUTER_API_KEY", st.secrets.get("OPENROUTER_API_KEY", ""))
+    if not api_key:
+        st.error("⚠️  OPENROUTER_API_KEY not set.")
+        st.stop()
+
+    prompt = f"""You are an expert botanist. The user wants to learn about: "{query}"
+
+Respond ONLY with a valid JSON object — no markdown, no extra text.
+
+JSON schema:
+{{
+  "plantName": "Most common name",
+  "scientificName": "Genus species",
+  "found": true,
+  "emoji": "a single relevant emoji for this plant",
+  "shortDescription": "1-2 sentence overview of the plant",
+  "careInstructions": {{
+    "water": "Watering frequency and tips",
+    "sunlight": "Light requirements",
+    "soil": "Soil type and drainage needs",
+    "difficulty": "Beginner / Intermediate / Expert"
+  }},
+  "natureImpact": {{
+    "role": "Its role in the ecosystem (pollinator magnet, nitrogen fixer, etc.)",
+    "invasive": true or false,
+    "invasiveNote": "explanation if invasive, else empty string",
+    "benefits": "Positive impacts on nature and environment",
+    "concerns": "Any negative or harmful effects on nature, or empty string if none"
+  }},
+  "funFact": "One genuinely interesting or surprising fact"
+}}
+
+If the query is not a real plant, return: {{"found": false, "plantName": "{query}", "scientificName": "", "emoji": "❓", "shortDescription": "", "careInstructions": {{}}, "natureImpact": {{}}, "funFact": ""}}"""
+
+    models = [
+        "openrouter/free",
+        "meta-llama/llama-4-scout:free",
+        "google/gemma-3-12b-it:free",
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+    ]
+
+    for model in models:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+        )
+        if response.status_code in (429, 503, 502, 404):
+            continue
+        if not response.ok:
+            raise RuntimeError(f"OpenRouter error {response.status_code}: {response.text}")
+        raw = response.json()["choices"][0]["message"]["content"].strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        return json.loads(raw)
+
+    raise RuntimeError("All models are rate-limited. Please try again in a moment.")
+
+
 
 # ─── UI helpers ───────────────────────────────────────────────────────────────
+def render_easter_egg():
+    """
+    Easter egg: type 'plantdaddy' anywhere on the page (no input focused needed).
+    Triggers Plant Daddy Mode — confetti explosion + funny takeover message.
+    """
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <script>
+        (function() {
+            var secret = 'plantdaddy';
+            var typed  = '';
+
+            document.addEventListener('keydown', function(e) {
+                typed += e.key.toLowerCase();
+                if (typed.length > secret.length) {
+                    typed = typed.slice(-secret.length);
+                }
+                if (typed === secret) {
+                    typed = '';
+                    launchPlantDaddy();
+                }
+            }, true);
+
+            function launchPlantDaddy() {
+                var doc = window.parent.document;
+
+                /* ── confetti canvas ── */
+                var old = doc.getElementById('pd-canvas');
+                if (old) old.remove();
+                var cv = doc.createElement('canvas');
+                cv.id = 'pd-canvas';
+                cv.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99998';
+                doc.body.appendChild(cv);
+                cv.width  = window.parent.innerWidth;
+                cv.height = window.parent.innerHeight;
+                var ctx = cv.getContext('2d');
+
+                var pieces = Array.from({length: 120}, function() {
+                    var hue = Math.random() * 360;
+                    return {
+                        x:    Math.random() * cv.width,
+                        y:    -20 - Math.random() * cv.height * .5,
+                        w:     6  + Math.random() * 10,
+                        h:     10 + Math.random() * 14,
+                        color: 'hsl(' + hue + ',90%,55%)',
+                        vy:   3   + Math.random() * 5,
+                        vx:   (Math.random() - .5) * 4,
+                        angle: Math.random() * Math.PI * 2,
+                        spin:  (Math.random() - .5) * .15,
+                        alpha: 1,
+                    };
+                });
+
+                var DURATION = 5000;
+                var start    = performance.now();
+
+                function animConf(now) {
+                    var elapsed = now - start;
+                    var fade = Math.max(0, 1 - Math.max(0, elapsed - (DURATION-1000))/1000);
+                    ctx.clearRect(0, 0, cv.width, cv.height);
+                    pieces.forEach(function(p) {
+                        p.x += p.vx; p.y += p.vy; p.angle += p.spin;
+                        if (p.y > cv.height + 20) { p.y = -20; p.x = Math.random()*cv.width; }
+                        ctx.save();
+                        ctx.globalAlpha = fade;
+                        ctx.translate(p.x, p.y);
+                        ctx.rotate(p.angle);
+                        ctx.fillStyle = p.color;
+                        ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+                        ctx.restore();
+                    });
+                    if (elapsed < DURATION) requestAnimationFrame(animConf);
+                    else cv.remove();
+                }
+                requestAnimationFrame(animConf);
+
+                /* ── funny popup banner ── */
+                var oldBanner = doc.getElementById('pd-banner');
+                if (oldBanner) oldBanner.remove();
+
+                var banner = doc.createElement('div');
+                banner.id = 'pd-banner';
+                banner.innerHTML = [
+                    '<div style="font-size:3rem;margin-bottom:.5rem">🌵👨‍🌾🌵</div>',
+                    '<div style="font-size:1.6rem;font-weight:900;letter-spacing:-.5px">PLANT DADDY MODE</div>',
+                    '<div style="font-size:.95rem;margin-top:.4rem;opacity:.9">',
+                    'You are now legally responsible for every plant on Earth.<br>',
+                    'Water them. ALL of them. Good luck.',
+                    '</div>',
+                    '<div style="font-size:.75rem;margin-top:.75rem;opacity:.6">',
+                    '(type "plantdaddy" again to escape... just kidding, there is no escape)',
+                    '</div>',
+                ].join('');
+                banner.style.cssText = [
+                    'position:fixed', 'top:50%', 'left:50%',
+                    'transform:translate(-50%,-50%) scale(0)',
+                    'background:linear-gradient(135deg,#14532d,#166534)',
+                    'color:white', 'padding:2rem 2.5rem',
+                    'border-radius:1.5rem',
+                    'box-shadow:0 20px 60px rgba(0,0,0,.4)',
+                    'z-index:99999', 'text-align:center',
+                    'font-family:DM Sans,sans-serif',
+                    'max-width:420px', 'width:90vw',
+                    'transition:transform .4s cubic-bezier(.34,1.56,.64,1)',
+                    'pointer-events:none',
+                ].join(';');
+                doc.body.appendChild(banner);
+
+                /* pop in */
+                setTimeout(function() {
+                    banner.style.transform = 'translate(-50%,-50%) scale(1)';
+                }, 50);
+
+                /* pop out after 4s */
+                setTimeout(function() {
+                    banner.style.transform = 'translate(-50%,-50%) scale(0)';
+                    setTimeout(function() { banner.remove(); }, 400);
+                }, 4200);
+            }
+        })();
+        </script>
+        """,
+        height=1,
+        scrolling=False,
+    )
+
+
 def render_header():
     st.markdown(
         """
@@ -610,21 +805,202 @@ def render_history():
         st.divider()
 
 
+def render_search_result(data: dict):
+    """Render a plant info card from search_plant() result."""
+    if not data.get("found", True):
+        st.markdown(
+            f"""
+            <div class="pc-card" style="text-align:center;padding:2rem">
+              <div style="font-size:3rem;margin-bottom:.75rem">❓</div>
+              <h3 style="color:#14532d;margin:0 0 .5rem">Plant not found</h3>
+              <p style="color:#6b7280">We couldn't find <strong>{data.get('plantName','')}</strong>.
+              Try a different name or spelling.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    care = data.get("careInstructions", {})
+    nature = data.get("natureImpact", {})
+    diff = care.get("difficulty", "")
+    diff_color = {"Beginner": "#16a34a", "Intermediate": "#d97706", "Expert": "#dc2626"}.get(diff, "#6b7280")
+    invasive = nature.get("invasive", False)
+
+    # Build conditional blocks in Python to avoid f-string / apostrophe issues
+    invasive_html = ""
+    if invasive:
+        note = nature.get("invasiveNote", "")
+        invasive_html = f'<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:.75rem;padding:.75rem;margin-bottom:.75rem;font-size:.875rem;color:#991b1b"><strong>&#9888; Invasive species</strong> — {note}</div>'
+
+    concerns_html = ""
+    if nature.get("concerns"):
+        concerns_html = f'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:.75rem;padding:.75rem;margin-bottom:.5rem;font-size:.875rem;color:#374151"><strong style="color:#c2410c">Concerns:</strong> {nature.get("concerns","")}</div>'
+
+    st.markdown(
+        f"""
+        <div style="border:2px solid #bbf7d0;border-radius:1.25rem;overflow:hidden;
+                    box-shadow:0 4px 24px rgba(20,83,45,.1);background:white;margin-bottom:1rem">
+
+          <div style="background:linear-gradient(135deg,#14532d,#166534);color:white;padding:1.5rem;">
+            <div style="font-size:2.5rem;margin-bottom:.4rem">{data.get("emoji","&#127807;")}</div>
+            <div style="font-size:1.4rem;font-weight:800">{data.get("plantName","")}</div>
+            <div style="font-style:italic;opacity:.85;font-size:.9rem">{data.get("scientificName","")}</div>
+            <div style="margin-top:.6rem;font-size:.9rem;opacity:.9;line-height:1.5">{data.get("shortDescription","")}</div>
+          </div>
+
+          <div style="padding:1.5rem">
+
+            <div style="margin-bottom:1.25rem">
+              <span style="background:{diff_color};color:white;padding:.25rem .75rem;
+                           border-radius:9999px;font-size:.8rem;font-weight:700">
+                {diff} difficulty
+              </span>
+            </div>
+
+            <p style="font-weight:700;color:#14532d;margin-bottom:.75rem;font-size:1rem">Care Instructions</p>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1.5rem">
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:.9rem;padding:.9rem;text-align:center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     style="margin:0 auto .4rem;display:block">
+                  <path d="M12 2C6 8 4 12 4 15a8 8 0 0 0 16 0c0-3-2-7-8-13z"/>
+                </svg>
+                <div style="font-weight:700;font-size:.75rem;color:#1d4ed8;margin-bottom:.25rem">WATER</div>
+                <div style="font-size:.8rem;color:#374151;line-height:1.4">{care.get("water","—")}</div>
+              </div>
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:.9rem;padding:.9rem;text-align:center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#eab308"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     style="margin:0 auto .4rem;display:block">
+                  <circle cx="12" cy="12" r="4"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                </svg>
+                <div style="font-weight:700;font-size:.75rem;color:#a16207;margin-bottom:.25rem">SUNLIGHT</div>
+                <div style="font-size:.8rem;color:#374151;line-height:1.4">{care.get("sunlight","—")}</div>
+              </div>
+              <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:.9rem;padding:.9rem;text-align:center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9333ea"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     style="margin:0 auto .4rem;display:block">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                <div style="font-weight:700;font-size:.75rem;color:#7e22ce;margin-bottom:.25rem">SOIL</div>
+                <div style="font-size:.8rem;color:#374151;line-height:1.4">{care.get("soil","—")}</div>
+              </div>
+            </div>
+
+            <p style="font-weight:700;color:#14532d;margin-bottom:.75rem;font-size:1rem">Impact on Nature</p>
+            {invasive_html}
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:.75rem;
+                        padding:.75rem;margin-bottom:.5rem;font-size:.875rem;color:#374151">
+              <strong style="color:#15803d">Ecosystem role:</strong> {nature.get("role","—")}
+            </div>
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:.75rem;
+                        padding:.75rem;margin-bottom:.5rem;font-size:.875rem;color:#374151">
+              <strong style="color:#15803d">Benefits:</strong> {nature.get("benefits","—")}
+            </div>
+            {concerns_html}
+
+            <div style="background:linear-gradient(135deg,#fff7ed,#fffbeb);
+                        border:2px solid #fed7aa;border-radius:.9rem;padding:1rem;margin-top:.75rem">
+              <p style="font-weight:700;color:#92400e;margin:0 0 .35rem;font-size:.875rem">Did you know?</p>
+              <p style="color:#374151;font-size:.875rem;line-height:1.5;margin:0">{data.get("funFact","")}</p>
+            </div>
+
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_search_view():
+    st.markdown(
+        """
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:1.25rem">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#14532d"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <span style="font-size:1.3rem;font-weight:700;color:#14532d">Plant Library</span>
+        </div>
+        <p style="color:#6b7280;font-size:.9rem;margin-bottom:1.25rem">
+          Search any plant to get care instructions and its impact on nature.
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    search_col, btn_col = st.columns([5, 1])
+    with search_col:
+        query = st.text_input(
+            "Search",
+            value=st.session_state.search_query,
+            placeholder="e.g. Monstera, Lavender, Japanese Knotweed...",
+            label_visibility="collapsed",
+            key="search_input",
+        )
+    with btn_col:
+        search_clicked = st.button("Search", use_container_width=True, type="primary", key="search_btn")
+
+    if search_clicked and query.strip():
+        st.session_state.search_query = query.strip()
+        with st.spinner(f"Looking up {query.strip()}..."):
+            try:
+                result = search_plant(query.strip())
+                st.session_state.search_result = result
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Search failed: {exc}")
+
+    if st.session_state.search_result:
+        render_search_result(st.session_state.search_result)
+
+
 # ─── Main render ──────────────────────────────────────────────────────────────
 render_header()
+render_easter_egg()   # 🥚 always listening for "plantdaddy"
 
-# Top navigation — orange History button
-nav_col1, nav_col2 = st.columns([6, 1])
-with nav_col2:
-    btn_label = "History" if st.session_state.view == "main" else "← Back"
-    if st.button(btn_label, key="nav_toggle", use_container_width=True, type="primary"):
-        st.session_state.view = "history" if st.session_state.view == "main" else "main"
-        st.rerun()
-
-# Make just the nav button orange via CSS (primary buttons are easy to target)
+# ── Style the tabs to match the app theme ─────────────────────────────────────
 st.markdown(
     """
     <style>
+    /* Tab bar background */
+    div[data-baseweb="tab-list"] {
+        gap: .3rem !important;
+        background: transparent !important;
+        border-bottom: 2px solid #bbf7d0 !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 1.5rem !important;
+    }
+    /* Each tab button */
+    div[data-baseweb="tab-list"] button[role="tab"] {
+        background: #e5e7eb !important;
+        border-radius: .75rem .75rem 0 0 !important;
+        padding: .55rem 1.4rem !important;
+        font-weight: 600 !important;
+        font-family: 'DM Sans', sans-serif !important;
+        color: #374151 !important;
+        border: none !important;
+        font-size: .95rem !important;
+    }
+    /* Active tab */
+    div[data-baseweb="tab-list"] button[role="tab"][aria-selected="true"] {
+        background: #14532d !important;
+        color: white !important;
+    }
+    /* Hover on inactive tab */
+    div[data-baseweb="tab-list"] button[role="tab"]:hover {
+        background: #d1fae5 !important;
+        color: #14532d !important;
+    }
+    /* Hide default highlight bar */
+    div[data-baseweb="tab-highlight"] { display: none !important; }
+    div[data-baseweb="tab-border"]    { display: none !important; }
+
+    /* Primary buttons stay orange */
     button[kind="primary"] {
         background: #ea580c !important;
         border-color: #ea580c !important;
@@ -638,12 +1014,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── HISTORY VIEW ──────────────────────────────────────────────────────────────
-if st.session_state.view == "history":
-    render_history()
+tab_home, tab_search, tab_history = st.tabs(["Home", "Plant Library", "History"])
 
-# ── MAIN VIEW ─────────────────────────────────────────────────────────────────
-else:
+with tab_home:
     left_col, right_col = st.columns([1, 1], gap="large")
 
     with left_col:
@@ -793,6 +1166,12 @@ else:
                 """,
                 unsafe_allow_html=True,
             )
+
+with tab_search:
+    render_search_view()
+
+with tab_history:
+    render_history()
 
 
 # ─── OPTIONAL: swap in Supabase backend ───────────────────────────────────────
